@@ -1,0 +1,33 @@
+name: Refresh S3 Index
+
+on:
+  workflow_dispatch:      # Allow manual runs from GitHub
+  schedule:               # Optional: runs daily at midnight UTC
+    - cron: '0 0 * * *'
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Generate index.html from S3 file list
+        run: |
+          echo "<!DOCTYPE html><html><body><h1>Files in S3</h1><ul>" > index.html
+          aws s3api list-objects-v2 --bucket ${{ secrets.S3_BUCKET }} \
+            --query "Contents[].Key" --output text | tr '\t' '\n' | while read file; do
+              if [ ! -z "$file" ]; then
+                echo "<li><a href=\"https://${{ secrets.S3_BUCKET }}.s3.${{ secrets.AWS_REGION }}.amazonaws.com/$file\">$file</a></li>" >> index.html
+              fi
+            done
+          echo "</ul></body></html>" >> index.html
+
+      - name: Upload new index.html to S3
+        run: |
+          aws s3 cp index.html s3://${{ secrets.S3_BUCKET }}/index.html --acl public-read
