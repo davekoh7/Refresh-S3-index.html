@@ -1,0 +1,37 @@
+name: Generate and Publish S3 Index (File List Only)
+
+on:
+  workflow_dispatch:      # Manual trigger
+  schedule:               # Optional: run daily at midnight
+    - cron: '0 0 * * *'
+
+jobs:
+  generate-index:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: List all S3 files
+        id: list_files
+        run: |
+          # Get all object keys and save to file
+          aws s3api list-objects-v2 --bucket ${{ secrets.S3_BUCKET }} \
+            --query "Contents[].Key" --output text > files.txt
+
+      - name: Generate index.html
+        run: |
+          echo "<!DOCTYPE html><html><body><h1>Files in S3</h1><ul>" > index.html
+          while read file; do
+            echo "<li><a href=\"https://${{ secrets.S3_BUCKET }}.s3.${{ secrets.AWS_REGION }}.amazonaws.com/$file\">$file</a></li>" >> index.html
+          done < files.txt
+          echo "</ul></body></html>" >> index.html
+
+      - name: Upload new index.html to S3
+        run: |
+          aws s3 cp index.html s3://${{ secrets.S3_BUCKET }}/index.html --acl public-read
