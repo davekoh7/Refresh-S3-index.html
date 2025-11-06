@@ -1,33 +1,28 @@
-name: Refresh S3 Index
+import os
 
-on:
-  workflow_dispatch:      # Allow manual runs from GitHub
-  schedule:               # Optional: runs daily at midnight UTC
-    - cron: '0 0 * * *'
+# List of files in your bucket (replace this with actual S3 file keys if needed)
+files = [
+    "file1.txt",
+    "file2.jpg",
+    "folder/file3.pdf"
+]
 
-jobs:
-  refresh:
-    runs-on: ubuntu-latest
+# Your CloudFront domain
+cloudfront_domain = "https://dcvd3b0c61l64.cloudfront.net"
 
-    steps:
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v2
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
+# Generate HTML
+html_content = "<!DOCTYPE html>\n<html>\n<head>\n<title>File Listing</title>\n</head>\n<body>\n"
+html_content += "<h1>Files</h1>\n<ul>\n"
 
-      - name: Generate index.html from S3 file list
-        run: |
-          echo "<!DOCTYPE html><html><body><h1>Files in S3</h1><ul>" > index.html
-          aws s3api list-objects-v2 --bucket ${{ secrets.S3_BUCKET }} \
-            --query "Contents[].Key" --output text | tr '\t' '\n' | while read file; do
-              if [ ! -z "$file" ]; then
-                echo "<li><a href=\"https://${{ secrets.S3_BUCKET }}.s3.${{ secrets.AWS_REGION }}.amazonaws.com/$file\">$file</a></li>" >> index.html
-              fi
-            done
-          echo "</ul></body></html>" >> index.html
+for file in files:
+    # Join CloudFront URL with the file key
+    url = f"{cloudfront_domain}/{file}"
+    html_content += f'  <li><a href="{url}">{file}</a></li>\n'
 
-      - name: Upload new index.html to S3
-        run: |
-          aws s3 cp index.html s3://${{ secrets.S3_BUCKET }}/index.html
+html_content += "</ul>\n</body>\n</html>"
+
+# Save to index.html
+with open("index.html", "w") as f:
+    f.write(html_content)
+
+print("index.html generated with CloudFront URLs!")
